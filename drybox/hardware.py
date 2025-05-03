@@ -1,0 +1,66 @@
+from machine import Pin
+from pico.pin import Analog  # Import Pin and ADC from the machine module
+
+
+class Thermister:
+    """
+    A class to represent a thermister sensor.
+    """
+
+    def __init__(self, pin, min_temp: float = 0, max_temp: float = 100):
+        self.pin = Analog(Pin(pin, Pin.IN), min_temp, max_temp)
+        
+
+    def get_temperature(self) -> float:
+        """
+        Returns temperature in Celsius.
+        """
+        return self.pin.read_float()
+    
+    def get_temperature_fahrenheit(self) -> float:
+        """
+        Returns temperature in Fahrenheit.
+        """
+        return self.get_temperature() * 9 / 5 + 32
+
+
+class Heater:
+    UNSAFE_TEMPERATURE = 70
+    UNSAFE_PICO_TEMPERATURE = 85  # From Pico datasheet
+    PICO_THERMISTER = Thermister(4, Pin.IN)
+
+    @staticmethod
+    def check(*heaters):
+        """
+        Check if the heater is in a safe state. If the temperature exceeds the unsafe limit, panic.
+        """
+        if Heater.PICO_THERMISTER.get_temperature() > Heater.UNSAFE_PICO_TEMPERATURE:
+            print("Panic! Unsafe temperature detected.")
+            return False
+        
+        for heater in heaters:
+            if heater.get_temperature() > heater.max_temperature:
+                print("Panic! Unsafe temperature detected.")
+                return False
+        
+        return True
+
+    def __init__(self, pin: int, max_temperature: int = UNSAFE_TEMPERATURE):
+        """
+        Initialize the heater with a pin and an optional unsafe temperature.
+
+        Args:
+            pin (int): The pin number for the heater.
+            unsafe_temperature (int, optional): The temperature at which the heater is considered unsafe. Defaults to 65.
+        """
+        self.pin = Pin(pin, Pin.OUT)
+        self.max_temperature = max_temperature
+        self.is_on = False
+
+    def on(self):
+        """
+        Turn on the heater.
+        """
+        self.pin.on()
+        self.is_on = True
+        print("Heater is ON")
