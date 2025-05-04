@@ -1,5 +1,10 @@
+import asyncio
 from machine import Pin
 from pico.pin import Analog  # Import Pin and ADC from the machine module
+
+# micropython imports
+import utime
+import dht
 
 
 class Thermister:
@@ -65,6 +70,46 @@ class Heater:
         print("Heater is ON")
 
 
+class Hygrometer:
+    def __init__(self, pin: int = 28):
+        self.pin = dht.DHT11(Pin(pin))
+        self.start_time = utime.ticks_ms()
+        self.read_time = None
+
+    def measure_async(self):
+        asyncio.create_task(self._read())
+
+    async def _read(self):
+        self.try_read()  # Just run the read function without returning its result
+
+    def try_read(self):
+        """
+        Read the DHT11 sensor data.
+        """
+        current_time = utime.ticks_ms()
+        last_time = self.read_time if self.read_time is not None else self.start_time
+        if utime.ticks_diff(current_time, last_time) < 1_000:  # 1 second
+            return False
+        
+        self.pin.measure()
+        self.read_time = current_time
+        return True
+    
+    def get_humidity(self):
+        if self.read_time is None:
+            return None
+        
+        return self.pin.humidity()
+    
+    def get_temperature(self):
+        if self.read_time is None:
+            return None
+        
+        return self.pin.temperature()
+        
+    
+
+
 class Pico:
     """
     A class to hold singletons for the Pico board.
@@ -88,23 +133,35 @@ class Pico:
     PICO_MIN_TEMP = PICO_SCALE + PICO_OFFSET  # 27 - (3.3V - 0.706) / 0.001721 = 27 - 2.594 / 0.001721 = -1480.26
     PICO_MAX_TEMP = PICO_OFFSET  # 27 - (0 - 0.706) / 0.001721 = 27 + 0.706 / 0.001721 = 437.227
 
-    PICO_THERMISTER = Thermister(4, min_temp=PICO_OFFSET, max_temp=PICO_MAX_TEMP, sensor_scaling=PICO_SCALE)
+    PICO_THERMISTER = Thermister(4, min_temp=PICO_MIN_TEMP, max_temp=PICO_MAX_TEMP, sensor_scaling=PICO_SCALE)
 
 
-if __name__ == "__main__":
+
+async def main():
     from collections import OrderedDict
-    from utime import sleep_ms
+    
+    hygrometer = Hygrometer()
+    start_time = utime.ticks_ms()
+    def time_since_start():
+        return utime.ticks_diff(utime.ticks_ms(), start_time) / 1000
 
-    sensors = OrderedDict([
+    data = OrderedDict([
         ('Pico temperature', Pico.PICO_THERMISTER.get_temperature,),
+        ('humidity', hygrometer.get_humidity,),
+        ('dht tmperature', hygrometer.get_temperature,),
+        ('timestamp', time_since_start),
     ])
 
-    print("; ".join(sensors.keys()))
+    print("; ".join(data.keys()))
 
     while True:
-        try:
-            values = [str(getter()) for getter in sensors.values()]
-            print("; ".join(values))
-            sleep_ms(500)
-        except KeyboardInterrupt:
-            break
+        hygrometer.measure_async()  # _read attempts to read only if the interval has passed
+        
+        values = [str(getter()) for getter in data.values()]
+        print("; ".join(values))
+        
+        await asyncio.sleep_ms(150)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+    
