@@ -5,6 +5,12 @@ from utime import sleep, sleep_ms
 LED_PIN = "LED"
 TEMP_PIN = 4
 led = Pin("LED", Pin.OUT)
+relays = [
+    Pin(10, Pin.OUT),
+    Pin(11, Pin.OUT),
+    Pin(12, Pin.OUT),
+    Pin(13, Pin.OUT),
+]
 
 
 def main():
@@ -15,20 +21,47 @@ def main():
     flash(pause_after=1000)
 
     # Check temperature pin
-    temp_pin = ADC(TEMP_PIN)
-    print(f"Temperature pin: {temp_pin.read_u16()}")
-    if temp_pin.read_u16() in (0, 65535):
-        raise ValueError("Temperature pin value is suspicious")
-    temp_voltage = temp_pin.read_u16() * 3.3 / 65535
-    print(f"Temperature voltage: {temp_voltage}V")
-    temp_celsius = 27 - (temp_voltage - 0.706) / 0.001721
-    print(f"Temperature: {temp_celsius}º°C")
+    check_thermister()
     # Flash twice for temperature check
     flash(times=2, pause_after=1000)
+
+    # Check relay pin
+    check_relays()
+    flash(times=3, pause_after=1000)
 
     # End by flashing the LED indefinitely
     while True:
         flash(duration_ms=250)
+
+
+def check_thermister():
+    temp_pin = ADC(TEMP_PIN)
+    print(f"Temperature pin: {temp_pin.read_u16()}")
+
+    if temp_pin.read_u16() in (0, 65535):
+        raise ValueError("Temperature pin value is suspicious")
+    
+    temp_voltage = temp_pin.read_u16() * 3.3 / 65535
+    print(f"Temperature voltage: {temp_voltage}V")
+    
+    temp_celsius = 27 - (temp_voltage - 0.706) / 0.001721
+    print(f"Temperature: {temp_celsius}º°C")
+    
+
+def check_relays():
+    led.off()
+    for relay in relays:
+        relay.off()
+
+    led.on()
+    for relay in relays:
+        sleep_ms(100)
+        relay.on()
+        sleep_ms(500)
+        led.off()
+        relay.off()
+        # sleep_ms(100)
+
 
 
 def flash(duration_ms=100, times=1, pause_before=None, pause_after=0):
