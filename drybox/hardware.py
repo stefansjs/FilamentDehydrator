@@ -114,7 +114,6 @@ class Pico:
     """
     A class to hold singletons for the Pico board.
 
-
     RPi Pico has a strange algorithm for the thermister.
     The formula is:
     V = 3.3 * ADC / 65535 = 3.3 * float_value
@@ -134,17 +133,21 @@ class Pico:
     PICO_MAX_TEMP = PICO_OFFSET  # 27 - (0 - 0.706) / 0.001721 = 27 + 0.706 / 0.001721 = 437.227
 
     PICO_THERMISTER = Thermister(4, min_temp=PICO_MIN_TEMP, max_temp=PICO_MAX_TEMP, sensor_scaling=PICO_SCALE)
+    PICO_LED = Pin("LED", Pin.OUT)
 
 
 
-async def main():
+
+if __name__ == "__main__":
+    from microapp.microapp import MicroApp
     from collections import OrderedDict
-    
+
     hygrometer = Hygrometer()
     start_time = utime.ticks_ms()
     def time_since_start():
         return utime.ticks_diff(utime.ticks_ms(), start_time) / 1000
 
+    hygrometer = Hygrometer()
     data = OrderedDict([
         ('Pico temperature', Pico.PICO_THERMISTER.get_temperature,),
         ('humidity', hygrometer.get_humidity,),
@@ -152,16 +155,12 @@ async def main():
         ('timestamp', time_since_start),
     ])
 
-    print("; ".join(data.keys()))
-
-    while True:
-        hygrometer.measure_async()  # _read attempts to read only if the interval has passed
-        
+    def main(app):
+        Pico.PICO_LED.toggle()
         values = [str(getter()) for getter in data.values()]
         print("; ".join(values))
-        
-        await asyncio.sleep_ms(150)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    app = MicroApp(verbose=False)
+    app.schedule(2000, hygrometer.try_read)
+    app.run(400, main)
     

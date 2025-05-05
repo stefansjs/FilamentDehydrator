@@ -1,3 +1,10 @@
+"""
+Executes a selected app from code deployed to the Pico by reading config.toml and running the main function requested.
+
+Ideally this lets me or others choose which app to run by editing the config.toml file without needing to open anything 
+in the editor or making code-changes.
+"""
+
 from external import tomli as toml
 
 def main():
