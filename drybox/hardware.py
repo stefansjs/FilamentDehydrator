@@ -69,6 +69,14 @@ class Heater:
         self.is_on = True
         print("Heater is ON")
 
+    def off(self):
+        """
+        Turn off the heater.
+        """
+        self.pin.off()
+        self.is_on = False
+        print("Heater is OFF")
+
 
 class Hygrometer:
     def __init__(self, pin: int = 28):

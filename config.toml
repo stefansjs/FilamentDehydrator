@@ -1,1 +1,30 @@
-main = "test"
+main="drybox"
+
+[drybox]
+target_humidity = 20
+target_temperature = 60
+
+unsafe_temperature = 80
+version = "1.0a"
+
+[drybox.hardware]
+#heater and fans are controlled by a bank of relays
+heater_pin = 10
+recirculation_fan_pin = 11
+exhaust_fan_pin = 12
+
+# hygrometer pin is running on a "1-wire" DHT communication protocol
+hygrometer_pin = 28
+
+# Pico has a 
+led_pin = "LED"
+thermister_pin = 4
+
+[drybox.pid]
+target_humidity = 20
+dehumidify_temperature = 60
+
+# temperature_threshold = 25
+# humidity_threshold = 60
+# temperature_hysteresis = 2
+# humidity_hysteresis = 5

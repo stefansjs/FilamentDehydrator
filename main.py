@@ -17,13 +17,10 @@ def main():
 
     elif main == "drybox":
         print("Running drybox")
-        from drybox.hardware import Heater
-        from microapp.microapp import MicroApp
+        from drybox.drybox import build
 
-        heater = Heater(pin=1)
-        # hygrometer = Hygrometer()
-        app = MicroApp()
-        app()
+        drybox = build(config)
+        drybox.run()
 
     else:
         print("no known main; running test")
@@ -46,3 +43,4 @@ if __name__ == "__main__":
     except BaseException as e:
         import sys
         sys.print_exception(e)
+        print(e)
