@@ -3,6 +3,7 @@ Creates an asyncio-based app that allows you to schedule some functions peridica
 """
 
 import asyncio
+import sys
 import utime
 
 
@@ -50,9 +51,11 @@ class MicroApp:
         self.check_count = 0
         self.shutdown = False
         self.verbose = verbose
+        self.error_handler = None
 
     def cancel(self):
         self.shutdown = True
+        print("Cancelling all scheduled tasks")
         for task in self._scheduled_funcs:
             task.cancel()
 
@@ -67,15 +70,14 @@ class MicroApp:
             *args: Positional arguments to pass to the function.
             **kwargs: Keyword arguments to pass to the function.
         """
-        task = asyncio.create_task(MicroApp._do_periodic(interval_ms, func, *args, **kwargs))
-        self._scheduled_funcs.append(task)
+        task = asyncio.create_task(self._do_periodic(interval_ms, func, *args, **kwargs))
+        self._scheduled_funcs.append([task, interval_ms])
 
     def run(self, period_ms=5000, main_func=None):
         return asyncio.run(self._main(period_ms, main_func or MicroApp._default_main))
 
 
-    @staticmethod
-    async def _do_periodic(interval_ms, func, *args, **kwargs):
+    async def _do_periodic(self, interval_ms, func, *args, **kwargs):
         """
         Calls a function peridocally at a specified interval. Schedule overruns are not prevented.
         If you have a task that may occasionally take more time than the interval period you'll be fine, 
@@ -83,10 +85,24 @@ class MicroApp:
         """
         while True:
             start = utime.ticks_ms()
-            func(*args, **kwargs)
+            try:
+                func(*args, **kwargs)
+            except Exception as e:
+                self._handle_background_error(func, e)
             
             delay_ms = interval_ms - utime.ticks_diff(utime.ticks_ms(), start)
             await asyncio.sleep_ms(delay_ms)
+
+    def _handle_background_error(self, func, exception):
+        if self.error_handler:
+            should_ignore = self.error_handler(func, exception)
+            if should_ignore:
+                return
+        
+        print(f"Error in scheduled function {func.__name__}: {exception}")
+        sys.print_exception(exception)
+        self.cancel()
+        raise
 
     async def _main(self, period_ms, func):
         if self.verbose:
