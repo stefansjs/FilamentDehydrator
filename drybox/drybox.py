@@ -49,6 +49,16 @@ class Status:
     EXHAUSTING = 12
     TARGET_REACHED = 13
 
+STATUS_BY_NAME = {
+    "unknown": Status.UNKNOWN,
+    "error": Status.ERROR,
+    "starting": Status.STARTING,
+    "running": Status.RUNNING,
+    "heating": Status.HEATING,
+    "exhausting": Status.EXHAUSTING,
+    "target_reached": Status.TARGET_REACHED
+}
+
 
 class DryBox:
     def __init__(self, config, heater, hygrometer, recirculation_fan, exhaust_fan, screen=None):
@@ -141,13 +151,13 @@ class DryBox:
     def _get_blink_pattern(state):
         
         status_blink ={
-            Status.ERROR: (1, 1),
-            Status.UNKNOWN: (2, 0.125),
-            Status.STARTING: (2, 0.25),
-            Status.HEATING: (5, 0.5),
-            Status.EXHAUSTING: (5, 0.5),
+            Status.ERROR: (10, 1),
+            Status.UNKNOWN: (0.8, 0.125),
+            Status.STARTING: (1.5, 0.625),
+            Status.HEATING: (4, 0.75),
+            Status.EXHAUSTING: (8, 0.75),
             Status.RUNNING: (0.3, 0.7),
-            Status.TARGET_REACHED: (3, 0.75),
+            Status.TARGET_REACHED: (1, 0.75),
         }
         
         blink_frequency, blink_duty_cycle = status_blink.get(state, status_blink[Status.UNKNOWN])
