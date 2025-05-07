@@ -15,6 +15,11 @@ def main():
         from test import main as test_main
         test_main()
 
+    elif main == "blink":
+        print("Running blink")
+        from blink import main as blink_main
+        blink_main()
+
     elif main == "drybox":
         print("Running drybox")
         from drybox.drybox import build
