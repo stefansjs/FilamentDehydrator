@@ -1,4 +1,4 @@
-main="drybox"
+main="blink"
 
 [drybox]
 target_humidity = 20

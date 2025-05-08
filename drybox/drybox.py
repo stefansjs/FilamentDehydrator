@@ -2,6 +2,7 @@ import asyncio
 import os
 
 #micropython imports
+from blink import Blink
 from machine import Pin
 
 # local imports
@@ -147,25 +148,21 @@ class DryBox:
                 Pico.PICO_LED.off()
                 await asyncio.sleep_ms(round(off_time_ms))
 
-    @staticmethod
-    def _get_blink_pattern(state):
-        
-        status_blink ={
-            Status.ERROR: (10, 1),
-            Status.UNKNOWN: (0.8, 0.125),
-            Status.STARTING: (1.5, 0.625),
-            Status.HEATING: (4, 0.75),
-            Status.EXHAUSTING: (8, 0.75),
-            Status.RUNNING: (0.3, 0.7),
-            Status.TARGET_REACHED: (1, 0.75),
-        }
-        
-        blink_frequency, blink_duty_cycle = status_blink.get(state, status_blink[Status.UNKNOWN])
-        cycle_period_ms = 1000 / blink_frequency
-        on_time_ms = cycle_period_ms * blink_duty_cycle
-        off_time_ms = cycle_period_ms * (1 - blink_duty_cycle)
 
-        return on_time_ms, off_time_ms   
+    STATUS_LED_PATTERNS ={
+        Status.ERROR: Blink.CONSTANT,
+        Status.UNKNOWN: Blink.WARNING,
+        Status.STARTING: Blink.SLOW_CALM,
+        Status.HEATING: Blink.ACTIVE_CALM,
+        Status.EXHAUSTING: Blink.ACTIVE,
+        Status.RUNNING: Blink.IDLE_CALM,
+        Status.TARGET_REACHED: Blink.IDLE_FAST,
+    }
+
+    @classmethod
+    def _get_blink_pattern(cls, state):
+        fallback = cls.STATUS_LED_PATTERNS[Status.UNKNOWN]
+        return Blink.blink_time_ms(cls.STATUS_LED_PATTERNS.get(state, fallback))
     
     def _error_callback(self, func, exception):
         self.state = Status.ERROR
