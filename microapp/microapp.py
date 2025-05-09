@@ -46,6 +46,10 @@ class MicroApp:
     CANCEL = True
     DONT_CANCEL = False
 
+    @staticmethod
+    def RESET_RUN_LOOP():
+        asyncio.new_event_loop()
+
     def __init__(self, verbose=True):
         self._scheduled_funcs = []
         self.check_count = 0
@@ -90,11 +94,21 @@ class MicroApp:
             start = utime.ticks_ms()
             try:
                 func(*args, **kwargs)
-            except Exception as e:
+            except BaseException as e:
                 self._handle_background_error(func, e)
             
             delay_ms = interval_ms - utime.ticks_diff(utime.ticks_ms(), start)
             await asyncio.sleep_ms(delay_ms)
+
+    async def _repeat_with_interval(self, interval_ms, func, *args, **kwargs):
+        while True:
+            try:
+                func(*args, **kwargs)
+            except BaseException as e:
+                self._handle_background_error(func, e)
+
+            await asyncio.sleep_ms(interval_ms)
+
 
     def _handle_background_error(self, func, exception):
         if isinstance(exception, asyncio.CancelledError):

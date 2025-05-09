@@ -32,6 +32,11 @@ def main():
         drybox = build(config)
         drybox.run()
 
+    elif main == "drybox_test":
+        print("Running drybox state cycle")
+        from drybox.drybox import main as drybox_test_main
+        drybox_test_main()
+
     else:
         print("no known main; running test")
         from test import main as test_main

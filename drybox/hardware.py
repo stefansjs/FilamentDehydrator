@@ -156,8 +156,8 @@ class Pico:
 
 
 
-if __name__ == "__main__":
-    from microapp.microapp import MicroApp
+def main():
+    from microapp import MicroApp
     from collections import OrderedDict
 
     hygrometer = Hygrometer()
