@@ -2,10 +2,11 @@ import asyncio
 import os
 
 #micropython imports
-from blink import Blink
 from machine import Pin
+import utime
 
 # local imports
+from blink import Blink
 from drybox import hardware
 from drybox.hardware import Pico
 from external import tomli as toml
@@ -95,6 +96,28 @@ class DryBox:
         print(self.heater, self.thermister, self.hygrometer, self.recirculation_fan, self.exhaust_fan, self.screen)
         self.state = Status.RUNNING
 
+    def heat(self):
+        self.state = Status.HEATING
+        self.heater.on()
+        self.recirculation_fan.on()
+
+    def stay_hot(self):
+        self.state = Status.TARGET_REACHED
+        self.heater.off()
+        self.recirculation_fan.on()
+
+    def vent(self):
+        self.state = Status.EXHAUSTING
+        self.heater.off()
+        self.recirculation_fan.off()
+        self.exhaust_fan.on()
+
+    def idle(self):
+        self.state = Status.RUNNING
+        self.heater.off()
+        self.recirculation_fan.off()
+        self.exhaust_fan.off()
+
     def reset(self):
         """
         Reset the DryBox to its initial state.
@@ -108,37 +131,45 @@ class DryBox:
     def run(self):
         self.reset()
         app = MicroApp()
-        app.schedule(2000, self.hygrometer.try_read)
-        app.schedule(100, self.check)
-        app.run()
+        app.schedule(250, self.print_readings)
+        app.add_scheduled(app._repeat_with_interval(2000, self.hygrometer.try_read))
+        app.run(100, self.check)
 
 
-    def check(self):
+    def check(self, microapp):
         temp, humidity = self.hygrometer.get_humidity(), self.hygrometer.get_temperature()
         if temp and temp > self.unsafe_temperature:
             print(f"Panic! Heater is too hot: {temp}, limit {self.unsafe_temperature}")
             self.panic()
+            return True
 
         if self.thermister.get_temperature() > self.unsafe_temperature:
             print(f"Panic! Thermister is too hot: {self.thermister.get_temperature()}, limit {self.unsafe_temperature}")
             self.panic()
+            return True
 
         # if humidity
+
+    def print_readings(self):
+        pico_temp = Pico.PICO_THERMISTER.get_temperature()
+        temperature, humidity = self.hygrometer.get_temperature(), self.hygrometer.get_humidity()
+        current_time = utime.localtime()
+        current_time = "{}:{:02d}:{:02d}:T{:02d}:{:02d}:{:02d}".format(*current_time)
+        print(";".join(map(str, [pico_temp, temperature, humidity, current_time])))
+        
 
     def panic(self):
         self.heater.off()
         self.exhaust_fan.on()
         self.recirculation_fan.on()
 
-        if self.heater.get_state() == "on":
-            print("Panic! Heater is on.")
-            os.system("sudo shutdown -h now")
-            raise RuntimeError("Panic! Heater is on.")
-        
         if self.screen is not None:
-            self.screen.display("OVERHEATING")
+            self.screen.display("OVERHEATED")
             self.screen.display(f"{self.heater.get_temperature()}℃")
             
+        os.system("sudo shutdown -h now")
+        raise RuntimeError("Panic! Heater is on.")
+    
     async def status_led(self):
         while True:
             on_time_ms, off_time_ms = self._get_blink_pattern(self.state)
@@ -172,7 +203,7 @@ class DryBox:
 def read_config(path=DEFAULT_CONFIG_PATH):
     try:
         with open(path, "rb") as f:
-            config_dict = toml.load(path)
+            config_dict = toml.load(f)
     except OSError:
         print("File error with config file: ", path)
         raise
@@ -213,10 +244,34 @@ def validate_config(config):
     return config
 
 
+
 def main():
+    asyncio.new_event_loop()
     drybox = build()
-    drybox.reset()
+    asyncio.create_task(cycle_hardware(drybox))
     drybox.run()
+
+
+async def cycle_hardware(drybox):
+    print("Starting cycle_hardware")
+    
+    while True:
+        print("heating")
+        drybox.heat()
+        await asyncio.sleep(2)
+
+        print("Recirculating")
+        drybox.stay_hot()
+        await asyncio.sleep(10)
+
+        print("Venting")
+        drybox.vent()
+        await asyncio.sleep(10)
+
+        print("Idling")
+        drybox.idle()
+        await asyncio.sleep(10)
+
 
 
 if __name__ == "__main__":

@@ -56,7 +56,7 @@ class MicroApp:
     def cancel(self):
         self.shutdown = True
         print("Cancelling all scheduled tasks")
-        for task in self._scheduled_funcs:
+        for task, _ in self._scheduled_funcs:
             task.cancel()
 
     def schedule(self, interval_ms, func, *args, **kwargs):
@@ -70,8 +70,11 @@ class MicroApp:
             *args: Positional arguments to pass to the function.
             **kwargs: Keyword arguments to pass to the function.
         """
-        task = asyncio.create_task(self._do_periodic(interval_ms, func, *args, **kwargs))
-        self._scheduled_funcs.append([task, interval_ms])
+        self.add_scheduled(self._do_periodic(interval_ms, func, *args, **kwargs))
+
+    def add_scheduled(self, coroutine):
+        task = asyncio.create_task(coroutine)
+        self._scheduled_funcs.append([task, None])
 
     def run(self, period_ms=5000, main_func=None):
         return asyncio.run(self._main(period_ms, main_func or MicroApp._default_main))
@@ -94,6 +97,14 @@ class MicroApp:
             await asyncio.sleep_ms(delay_ms)
 
     def _handle_background_error(self, func, exception):
+        if isinstance(exception, asyncio.CancelledError):
+            raise exception  # don't try to cancel while I'm being cancelled
+
+        if isinstance(exception, KeyboardInterrupt):
+            print("Received keyboard interrupt. Cancelling all tasks.")
+            self.cancel()
+            return
+        
         if self.error_handler:
             should_ignore = self.error_handler(func, exception)
             if should_ignore:

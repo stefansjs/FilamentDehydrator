@@ -20,6 +20,11 @@ def main():
         from blink import main as blink_main
         blink_main()
 
+    elif main == "hardware":
+        print("Running hardware")
+        from drybox.hardware import main as hardware_main
+        hardware_main()
+
     elif main == "drybox":
         print("Running drybox")
         from drybox.drybox import build

@@ -57,7 +57,7 @@ class Heater:
             pin (int): The pin number for the heater.
             unsafe_temperature (int, optional): The temperature at which the heater is considered unsafe. Defaults to 65.
         """
-        self.pin = Pin(pin, Pin.OUT)
+        self.pin = Pin(pin, Pin.OUT, pull=Pin.PULL_DOWN)
         self.max_temperature = max_temperature
         self.is_on = False
 
@@ -84,6 +84,9 @@ class Hygrometer:
         self.start_time = utime.ticks_ms()
         self.read_time = None
 
+        self.temperature = None
+        self.humidity = None
+
     def measure_async(self):
         asyncio.create_task(self._read())
 
@@ -99,21 +102,28 @@ class Hygrometer:
         if utime.ticks_diff(current_time, last_time) < 1_000:  # 1 second
             return False
         
-        self.pin.measure()
-        self.read_time = current_time
+        # Pico.PICO_LED.on()
+        try:
+            self.pin.measure()
+            self.temperature = self.pin.temperature()
+            self.humidity = self.pin.humidity()
+        
+        except Exception as e:
+            print("Failed to read measurements")
+            self.temperature = None
+            self.humidity = None
+            return False
+        
+        finally:
+            self.read_time = current_time
+        
         return True
     
     def get_humidity(self):
-        if self.read_time is None:
-            return None
-        
-        return self.pin.humidity()
+        return self.humidity
     
     def get_temperature(self):
-        if self.read_time is None:
-            return None
-        
-        return self.pin.temperature()
+        return self.temperature
         
     
 
@@ -151,11 +161,11 @@ if __name__ == "__main__":
     from collections import OrderedDict
 
     hygrometer = Hygrometer()
+
     start_time = utime.ticks_ms()
     def time_since_start():
         return utime.ticks_diff(utime.ticks_ms(), start_time) / 1000
 
-    hygrometer = Hygrometer()
     data = OrderedDict([
         ('Pico temperature', Pico.PICO_THERMISTER.get_temperature,),
         ('humidity', hygrometer.get_humidity,),
@@ -168,7 +178,8 @@ if __name__ == "__main__":
         values = [str(getter()) for getter in data.values()]
         print("; ".join(values))
 
+
+    MicroApp.RESET_RUN_LOOP()
     app = MicroApp(verbose=False)
     app.schedule(2000, hygrometer.try_read)
     app.run(400, main)
-    
