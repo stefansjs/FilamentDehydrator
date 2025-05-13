@@ -60,19 +60,26 @@ class Heater:
         self.pin = Pin(pin, Pin.OUT, pull=Pin.PULL_DOWN)
         self.max_temperature = max_temperature
         self.is_on = False
+        self.pin.off()
 
-    def on(self):
+    def on(self, force=False):
         """
         Turn on the heater.
         """
+        if self.is_on and force is False:
+            return
+        
         self.pin.on()
         self.is_on = True
         print("Heater is ON")
 
-    def off(self):
+    def off(self, force=False):
         """
         Turn off the heater.
         """
+        if force is False and not self.is_on:
+            return
+        
         self.pin.off()
         self.is_on = False
         print("Heater is OFF")
