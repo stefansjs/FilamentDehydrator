@@ -130,7 +130,7 @@ class DryBox:
 
     def run(self):
         self.reset()
-        app = MicroApp()
+        app = MicroApp(error_handler=self.error_handler, cancel_callback=self.reset)
         app.schedule(250, self.print_readings)
         app.add_scheduled(app._repeat_with_interval(2000, self.hygrometer.try_read))
         app.run(100, self.check)
@@ -169,6 +169,12 @@ class DryBox:
             
         os.system("sudo shutdown -h now")
         raise RuntimeError("Panic! Heater is on.")
+    
+    def error_handler(self, error):
+        if isinstance(error, KeyboardInterrupt):
+            self.reset()
+            return False
+        return False
     
     async def status_led(self):
         while True:

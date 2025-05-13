@@ -50,18 +50,22 @@ class MicroApp:
     def RESET_RUN_LOOP():
         asyncio.new_event_loop()
 
-    def __init__(self, verbose=True):
+    def __init__(self, verbose=True, error_handler=None, cancel_callback=None):
         self._scheduled_funcs = []
         self.check_count = 0
         self.shutdown = False
         self.verbose = verbose
-        self.error_handler = None
+        self.error_handler = error_handler
+        self.cancel_callback = cancel_callback
 
     def cancel(self):
         self.shutdown = True
         print("Cancelling all scheduled tasks")
         for task, _ in self._scheduled_funcs:
             task.cancel()
+
+        if self.cancel_callback:
+            self.cancel_callback()
 
     def schedule(self, interval_ms, func, *args, **kwargs):
         """
@@ -81,7 +85,12 @@ class MicroApp:
         self._scheduled_funcs.append([task, None])
 
     def run(self, period_ms=5000, main_func=None):
-        return asyncio.run(self._main(period_ms, main_func or MicroApp._default_main))
+        try:
+            return asyncio.run(self._main(period_ms, main_func or MicroApp._default_main))
+        
+        except Exception as e:
+            print("Exception in main")
+            self._handle_foreground_error(main_func or MicroApp._default_main, e)
 
 
     async def _do_periodic(self, interval_ms, func, *args, **kwargs):
@@ -112,6 +121,7 @@ class MicroApp:
 
     def _handle_background_error(self, func, exception):
         if isinstance(exception, asyncio.CancelledError):
+            print("task(s) cancelled")
             raise exception  # don't try to cancel while I'm being cancelled
 
         if isinstance(exception, KeyboardInterrupt):
@@ -121,13 +131,30 @@ class MicroApp:
         
         if self.error_handler:
             should_ignore = self.error_handler(func, exception)
-            if should_ignore:
+            if should_ignore is True:
                 return
         
         print(f"Error in scheduled function {func.__name__}: {exception}")
         sys.print_exception(exception)
         self.cancel()
         raise
+
+
+    def _handle_foreground_error(self, main_func, exception):
+        if isinstance(exception, KeyboardInterrupt):
+            print("application cancelled.")
+            if self.cancel_callback:
+                self.cancel_callback()
+            raise exception
+        
+        else:
+            if self.error_handler:
+                should_ignore = self.error_handler(main_func, exception)
+                if should_ignore is True:
+                    return
+            
+            raise exception
+
 
     async def _main(self, period_ms, func):
         if self.verbose:
@@ -138,10 +165,16 @@ class MicroApp:
         
             should_cancel = func(self)
             if should_cancel is MicroApp.CANCEL:
+                print(f"Ending {func.__name__}")
                 self.shutdown = True
                 return
             
             await asyncio.sleep_ms(period_ms)
+
+        print("Finishing _main.")
+        if self.cancel_callback:
+            self.cancel_callback()
+
 
     def _default_main(self):
         if self.verbose:
