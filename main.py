@@ -33,7 +33,7 @@ def main():
         drybox.run()
 
     elif main == "drybox_test":
-        print("Running drybox state cycle")
+        print("Running drybox test app")
         from drybox.drybox import main as drybox_test_main
         drybox_test_main()
 

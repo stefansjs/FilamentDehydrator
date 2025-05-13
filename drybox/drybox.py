@@ -138,7 +138,7 @@ class DryBox:
 
 
     def check(self, microapp):
-        temp, humidity = self.hygrometer.get_humidity(), self.hygrometer.get_temperature()
+        temp, humidity = self.latest_readings()
         if temp and temp > self.unsafe_temperature:
             print(f"Panic! Heater is too hot: {temp}, limit {self.unsafe_temperature}")
             self.panic()
@@ -153,12 +153,14 @@ class DryBox:
 
     def print_readings(self):
         pico_temp = Pico.PICO_THERMISTER.get_temperature()
-        temperature, humidity = self.hygrometer.get_temperature(), self.hygrometer.get_humidity()
+        temperature, humidity = self.latest_readings()
         current_time = utime.localtime()
         current_time = "{}:{:02d}:{:02d}:T{:02d}:{:02d}:{:02d}".format(*current_time)
         print(";".join(map(str, [pico_temp, temperature, humidity, current_time])))
-        
 
+    def latest_readings(self):
+        return self.hygrometer.get_temperature(), self.hygrometer.get_humidity()
+    
     def panic(self):
         self.heater.off()
         self.exhaust_fan.on()
