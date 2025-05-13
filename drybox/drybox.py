@@ -1,3 +1,4 @@
+from array import array
 import asyncio
 import os
 
@@ -128,10 +129,10 @@ class DryBox:
         self.exhaust_fan.off()
         Pico.PICO_LED.on()
 
-    def run(self):
+    def run(self, refresh_rate=4):
         self.reset()
         app = MicroApp(error_handler=self.error_handler, cancel_callback=self.reset)
-        app.schedule(250, self.print_readings)
+        app.schedule(round(1000 / refresh_rate), self.print_readings)
         app.add_scheduled(app._repeat_with_interval(2000, self.hygrometer.try_read))
         app.run(100, self.check)
 
@@ -206,6 +207,69 @@ class DryBox:
         Pico.PICO_LED.on()
 
 
+
+class Dehydrator:
+    def __init__(self, drybox, config=None):
+        self.drybox = drybox
+
+    @property
+    def temp(self):
+        return self.drybox.hygrometer.get_temperature()
+    
+    @property
+    def humidity(self):
+        return self.drybox.hygrometer.get_humidity()
+        
+    async def preheat(self, target_temp, pid_config=None, timeout_s=60):
+        start_temp = self.temp
+        if start_temp <= 0 or start_temp >= 100:
+            raise ValueError(f"temperature seems invalid: {start_temp}")
+        
+        pid_config = pid_config or {}
+        sample_rate = 4
+        sample_period_ms = round(1000 / sample_rate)
+        timeout_ms = int(round(timeout_s))
+        
+        histeresis = 1
+        settled_delay_s = 4
+        settled_threshold = 0.05
+        settled_delay_samples = settled_delay_s * sample_rate
+
+        temperature_measures = array('i', [0] * settled_delay_samples)
+        index = 0
+
+        start_time = current_time = utime.ticks_ms()
+        should_continue = True
+        while should_continue:
+            current_temp = self.temp
+
+            # Check loop pre-conditions
+            if current_temp >= self.drybox.heater.max_temperature:
+                raise ValueError(f"Temperature overshoot: {current_temp}")
+            
+            if utime.ticks_diff(current_time, start_time) >= timeout_s:
+                return False
+            
+            # This needs to be replaced with some proper signal processing
+            if target_temp - current_temp > histeresis:
+                self.drybox.heat()
+                index = 0
+            elif current_temp - target_temp > histeresis:
+                self.drybox.idle()
+                index = 0
+            elif index < settled_delay_samples:
+                temperature_measures[index] = current_temp
+                index += 1
+            else:
+                return True
+
+
+            await asyncio.sleep_ms(sample_period_ms)
+
+    async def warm_cycle(self):
+        pass
+            
+
 def read_config(path=DEFAULT_CONFIG_PATH):
     try:
         with open(path, "rb") as f:
@@ -254,8 +318,30 @@ def validate_config(config):
 def main():
     asyncio.new_event_loop()
     drybox = build()
-    asyncio.create_task(cycle_hardware(drybox))
-    drybox.run()
+    dehydrator = Dehydrator(drybox, {})
+    asyncio.create_task(preheat(dehydrator))
+    drybox.run(refresh_rate=1)
+    
+
+async def preheat(dehydrator):
+    # For now let's do one preheat cycle and recirculate down to low levels
+    temp = dehydrator.temp
+    if temp is None:
+        await asyncio.sleep_ms(3000)
+        temp = dehydrator.temp
+
+    if temp is None:
+        raise ValueError("Cannot read temperature")
+
+    if temp < 35:
+        did_preheat = await dehydrator.preheat(40)
+
+    dehydrator.drybox.idle()
+
+    if did_preheat:
+        print("Done preheating")
+    else:
+        print("preheat timed out")
 
 
 async def cycle_hardware(drybox):
