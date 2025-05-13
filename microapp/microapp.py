@@ -41,6 +41,44 @@ class MicroApp:
 
     That argument is the only difference between calling app.schedule(period, func) and app.run(period, func). 
     You do you.
+
+    There are two optional callbacks that do what you might expect
+    :
+      - `error_handler`
+      - `cancel_callback`
+
+    The error handler callback is passed as an argument to the constructor and it is called when an exception is caught.
+    The return value of error_handler indicates to the application whether the error was "handled" such that the 
+    application can continue operating. True indicates that the application can continue (aka, "exception is handled",
+    aka, "error can be ignored"); False indicates that the application should halt and the exception is reraised.
+
+    The arguments to error_handler are (func, exception). `func` is the underlying function of the asyncio task that 
+    caught the function. `exception` was the raised exception. Note that asyncio may throw exceptions, in which the func
+    argument corresponds to the function that asyncio is responsible for, not necessarily the actual thrower of the 
+    exception.
+
+    error example:
+    >>> def handle_error(func, exception):
+    >>>     if isinstance(exception, KeyboardInterrupt):
+    >>>         shutdown()
+    >>>         return True:
+    >>>     return False
+    >>> m = MicroApp(error_handler=handle_error)
+
+    `cancel_callback` is the callback that is called *after* the application is cancelled. This might happen because of
+    a KeyboardInterrupt, but it might not happen if the main function terminates abruptly. The motivation is to allow 
+    the application to perform final cleanup, like setting output pins to LOW before exiting the application. Unhandled
+    exceptions might not allow cancel_callback to be called. It is recommended to have an error handler to handle this
+    case.
+
+    cancel callback example:
+    >>> heater = Heater()
+    >>> def cancelled():
+    >>>     heater.off()
+    >>> a = MicroApp(cancel_callback=cancelled)
+    >>> a.run()
+    $ Heater is OFF
+    $ terminated by user
     """
 
     CANCEL = True
