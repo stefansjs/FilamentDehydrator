@@ -125,9 +125,7 @@ class MicroApp:
     def run(self, period_ms=5000, main_func=None):
         try:
             return asyncio.run(self._main(period_ms, main_func or MicroApp._default_main))
-        
-        except Exception as e:
-            print("Exception in main")
+        except BaseException as e:
             self._handle_foreground_error(main_func or MicroApp._default_main, e)
 
 
