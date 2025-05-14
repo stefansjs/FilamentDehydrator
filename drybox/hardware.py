@@ -1,8 +1,8 @@
 import asyncio
-from machine import Pin
 from pico.pin import Analog  # Import Pin and ADC from the machine module
 
 # micropython imports
+from machine import Pin, PWM
 import utime
 import dht
 
@@ -83,6 +83,57 @@ class Heater:
         self.pin.off()
         self.is_on = False
         print("Heater is OFF")
+
+
+class Fan:
+    """
+    PWM fan control with independ notions of duty cycle and on/off
+    """
+    U16_MAX = 65535
+
+    def __init__(self, pin, freq=10_000, duty_cycle=0.5, kick_start_ms=1000):
+        self.pin = pin
+        self.pwm = PWM(pin, freq=freq, duty_u16=0)  # Start in an OFF state
+        self.is_on = False
+        self.kick_start_ms = kick_start_ms
+
+        self._duty_cycle = int(round(duty_cycle * Fan.U16_MAX))
+        self._background_task = None
+
+    @property
+    def duty_cycle(self):
+        return self._duty_cycle / self.U16_MAX
+    
+    @duty_cycle.setter
+    def duty_cycle(self, value):
+        """ Sets duty cycle as a percentage from 0 to 1 """
+        self._duty_cycle = int(round(value * Fan.U16_MAX))
+        if self.is_on:
+            self.pwm.duty_u16(self._duty_cycle)
+
+    def on(self):
+        print(f"Turning on at {self.duty_cycle*100}%")
+        if self._background_task is None or self._background_task.done():
+            self._background_task = asyncio.create_task(self.kick_start())
+    
+    def off(self):
+        print("Turning off PWM fan")
+        if self._background_task is not None and not self._background_task.done():
+            self._background_task.cancel()
+        if self._background_task is not None:
+            self._background_task = None
+
+        self.pwm.duty_u16(0)
+        self.is_on = False
+
+    async def kick_start(self):
+        print(f"Kick-starting fan for {self.kick_start_ms}ms")
+        self.pwm.duty_u16(Fan.U16_MAX)
+        await asyncio.sleep_ms(self.kick_start_ms)
+        
+        print(f"slowing back down to {self.duty_cycle * 100}")
+        self.pwm.duty_u16(self._duty_cycle)
+        self.is_on = True
 
 
 class Hygrometer:
