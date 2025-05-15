@@ -7,6 +7,10 @@ import utime
 import dht
 
 
+class UnsafeTemperature(Exception):
+    pass
+
+
 class Thermister:
     def __init__(self, pin, min_temp: float = 0, max_temp: float = 100, sensor_scaling: float = 1):
         self.pin = Analog(pin, scale=sensor_scaling, offset=min_temp if sensor_scaling > 0 else max_temp)
@@ -29,27 +33,7 @@ class Thermister:
 
 
 class Heater:
-    UNSAFE_TEMPERATURE = 70
-    UNSAFE_PICO_TEMPERATURE = 85  # From Pico datasheet
-    
-
-    @staticmethod
-    def check(*heaters):
-        """
-        Check if the heater is in a safe state. If the temperature exceeds the unsafe limit, panic.
-        """
-        if Pico.PICO_THERMISTER.get_temperature() > Heater.UNSAFE_PICO_TEMPERATURE:
-            print("Panic! Unsafe temperature detected.")
-            return False
-        
-        for heater in heaters:
-            if heater.get_temperature() > heater.max_temperature:
-                print("Panic! Unsafe temperature detected.")
-                return False
-        
-        return True
-
-    def __init__(self, pin: int, max_temperature: int = UNSAFE_TEMPERATURE):
+    def __init__(self, pin: int):
         """
         Initialize the heater with a pin and an optional unsafe temperature.
 
@@ -58,9 +42,10 @@ class Heater:
             unsafe_temperature (int, optional): The temperature at which the heater is considered unsafe. Defaults to 65.
         """
         self.pin = Pin(pin, Pin.OUT, pull=Pin.PULL_DOWN)
-        self.max_temperature = max_temperature
-        self.is_on = False
         self.pin.off()
+        self.is_on = False
+        self.target_temperature = None
+        self.temp_histeresis = 2
 
     def on(self, force=False):
         """
@@ -83,6 +68,89 @@ class Heater:
         self.pin.off()
         self.is_on = False
         print("Heater is OFF")
+
+
+class TemperatureController:
+    UNSAFE_TEMPERATURE = 70
+    UNSAFE_PICO_TEMPERATURE = 85  # From Pico datasheet
+
+
+    def __init__(self, heater, thermister, hysteresis_c=1, max_temperature: int = UNSAFE_TEMPERATURE):
+        self.max_temperature = max_temperature
+        
+        self.heater = heater
+        self.thermister = thermister
+        self._target_temperature = None
+        self.temp_hysteresis = hysteresis_c
+        self.heater.off()
+        self.state = "idle"
+
+    def get_temperature(self):
+        return self.thermister.get_temperature()
+
+    def set_temperature(self, temp):
+        self._target_temperature = temp
+        if self.state == "running":
+            print(f"Setting temperature to {temp}")
+
+    def off(self):
+        self._target_temperature = None
+
+    def run_loop(self):
+        TemperatureController.check(self)
+        
+        temp = self.get_temperature()
+        if self._target_temperature is not None and temp is not None:
+            if temp < self._target_temperature - self.temp_hysteresis:
+                self.heater.on()
+            elif temp > self._target_temperature + self.temp_hysteresis:
+                self.heater.off()
+        
+        else:
+            self.state = "waiting for temperature"
+
+    async def run(self, check_interval_ms):
+        TemperatureController.check(self)
+        current_temp = self.get_temperature()
+        self.state = "waiting for temperature"
+        
+        # If the run loop is kicked off before setting a temperature, wait for the set temperature
+        while current_temp is None:
+            await asyncio.sleep_ms(check_interval_ms)
+            current_temp = self.get_temperature()
+            TemperatureController.check(self)
+
+        # Run until target temp is set to None
+        self.state = "running"        
+        print(f"Heating to {self._target_temperature}")
+        while True:
+            self.run_loop()
+
+
+    @staticmethod
+    def check(*heaters):
+        """
+        Check if the heater is in a safe state. If the temperature exceeds the unsafe limit, panic.
+        """
+        temp = Pico.PICO_THERMISTER.get_temperature()
+        if temp is not None and temp > TemperatureController.UNSAFE_PICO_TEMPERATURE:
+            print("Pico overheating!")
+            for heater in heaters:
+                heater.off()
+            raise UnsafeTemperature(f"Pico exceeded it's safe operating temperature: {temp} > {TemperatureController.UNSAFE_PICO_TEMPERATURE}")
+
+        for heater in heaters:
+            temp = heater.get_temperature()
+            if temp is not None and temp > heater.max_temperature:
+                print("Panic! Unsafe temperature detected.")
+                for heater in heaters:
+                    heater.off()
+        
+                raise UnsafeTemperature(f"a heater went beyond its configured max temperature: {heater.pin}, {temp} > {heater.max_temperature}")
+        
+        return True
+
+            
 
 
 class Fan:
