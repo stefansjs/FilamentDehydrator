@@ -116,10 +116,11 @@ class MicroApp:
             *args: Positional arguments to pass to the function.
             **kwargs: Keyword arguments to pass to the function.
         """
-        self.add_scheduled(self._do_periodic(interval_ms, func, *args, **kwargs))
+        task = asyncio.create_task(self._do_periodic(interval_ms, func, *args, **kwargs))
+        self._scheduled_funcs.append([task, interval_ms])
 
     def add_scheduled(self, coroutine):
-        task = asyncio.create_task(coroutine)
+        task = asyncio.create_task(self._wrap_coroutine(coroutine))
         self._scheduled_funcs.append([task, None])
 
     def run(self, period_ms=5000, main_func=None):
@@ -154,6 +155,13 @@ class MicroApp:
 
             await asyncio.sleep_ms(interval_ms)
 
+    async def _wrap_coroutine(self, coroutine):
+        try:
+            return await coroutine
+        except BaseException as e:
+            print(f"Exception in self-shcheduled co-routine: {coroutine}")
+            self._handle_background_error(coroutine, e)
+
 
     def _handle_background_error(self, func, exception):
         if isinstance(exception, asyncio.CancelledError):
@@ -165,15 +173,14 @@ class MicroApp:
             self.cancel()
             return
         
-        if self.error_handler:
-            should_ignore = self.error_handler(func, exception)
-            if should_ignore is True:
-                return
+        should_ignore = self._call_error_handler(func, exception)
+        if should_ignore is True:
+            return
         
         print(f"Error in scheduled function {func.__name__}: {exception}")
         sys.print_exception(exception)
         self.cancel()
-        raise
+        raise exception
 
 
     def _handle_foreground_error(self, main_func, exception):
@@ -183,13 +190,8 @@ class MicroApp:
                 self.cancel_callback()
             raise exception
         
-        else:
-            if self.error_handler:
-                should_ignore = self.error_handler(main_func, exception)
-                if should_ignore is True:
-                    return
-            
-            raise exception
+        self._call_error_handler(main_func, exception)
+        raise exception
 
 
     async def _main(self, period_ms, func):
@@ -219,3 +221,19 @@ class MicroApp:
             ))
         return MicroApp.DONT_CANCEL
         
+    def _call_error_handler(self, func, exception):
+        # This function is called once in main and once in background processes
+        if not self.error_handler:
+            return False  # False means I have *not* handled the error, aka it *should* be reraised
+        
+        try:
+            should_ignore = self.error_handler(func, exception)
+        except Exception as e:
+            print("Error in error handler")
+            sys.print_exception(e)
+            self.cancel()
+            raise e
+        else:
+            return should_ignore
+    
+    
