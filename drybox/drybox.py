@@ -4,6 +4,7 @@ import os
 
 #micropython imports
 from machine import Pin
+from pico.cycle import SlowCycle
 import utime
 
 # local imports
@@ -31,6 +32,19 @@ def build(config=None):
     hygrometer = hardware.Hygrometer(hardware_config['hygrometer_pin'])
     recirculation_fan = Pin(hardware_config['recirculation_fan_pin'], Pin.OUT)
     exhaust_fan = Pin(hardware_config['exhaust_fan_pin'], Pin.OUT)
+
+    # higher-level controls
+    control_config = config['controls']
+    heater = hardware.TemperatureController(
+        heater,
+        hygrometer, 
+        hysteresis_c=control_config.get('heater_hysteresis', 2)
+    )
+    recirculation_fan = SlowCycle(
+        recirculation_fan, 
+        cycle_percent=control_config.get('recirculation_cycle_percent', 0.1),
+        cycle_period_s=control_config.get('recirculation_cycle_period_s', 180)
+    )
 
     print(f"Built heater={hardware_config['heater_pin']}, hygrometer={hardware_config['hygrometer_pin']}, recirculation_fan={hardware_config['recirculation_fan_pin']}, exhaust_fan={hardware_config['exhaust_fan_pin']}")
 
@@ -97,15 +111,18 @@ class DryBox:
         print(self.heater, self.thermister, self.hygrometer, self.recirculation_fan, self.exhaust_fan, self.screen)
         self.state = Status.RUNNING
 
-    def heat(self):
+    def heat(self, target_temp=None):
         self.state = Status.HEATING
-        self.heater.on()
+        self.heater.set_temperature(target_temp or self.target_temperature)
         self.recirculation_fan.on()
+        self.exhaust_fan.off()
+        print(f"Heating to {self.target_temperature}")
 
     def stay_hot(self):
         self.state = Status.TARGET_REACHED
-        self.heater.off()
-        self.recirculation_fan.on()
+        self.heater.set_temperature(self.target_temperature)
+        self.recirculation_fan.cycle()
+        print(f"Holding temperature at {self.target_temperature}")
 
     def vent(self):
         self.state = Status.EXHAUSTING
@@ -127,7 +144,7 @@ class DryBox:
         self.heater.off()
         self.recirculation_fan.off()
         self.exhaust_fan.off()
-        Pico.PICO_LED.on()
+        print("Reset drybox")
 
     def run(self, refresh_rate=4):
         self.reset()
