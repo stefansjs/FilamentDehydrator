@@ -173,7 +173,7 @@ class DryBox:
         os.system("sudo shutdown -h now")
         raise RuntimeError("Panic! Heater is on.")
     
-    def error_handler(self, error):
+    def error_handler(self, func, error):
         if isinstance(error, KeyboardInterrupt):
             self.reset()
             return False
