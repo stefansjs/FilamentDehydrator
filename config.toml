@@ -1,8 +1,8 @@
 main="drybox_test"
 
 [drybox]
-target_humidity = 20
-target_temperature = 60
+target_humidity = 10
+target_temperature = 40
 
 unsafe_temperature = 80
 version = "1.0a"
@@ -20,11 +20,19 @@ hygrometer_pin = 28
 led_pin = "LED"
 thermister_pin = 4
 
-[drybox.pid]
-target_humidity = 20
-dehumidify_temperature = 60
+[drybox.controls]
+timeout_s = 600
+sample_rate = 0.75
 
-# temperature_threshold = 25
-# humidity_threshold = 60
-# temperature_hysteresis = 2
-# humidity_hysteresis = 5
+heater_hysteresis = 1
+
+recirculation_cycle_period_s = 0.10
+recirculation_cycle_percent = 10
+exhaust_duration_s = 15
+
+sensor_initial_wait_ms = 2000
+sensor_settle_duration_s = 15
+
+measurement_interval_s = 10
+total_measurement_duration_s = 90
+slope_threshold = 0.25
