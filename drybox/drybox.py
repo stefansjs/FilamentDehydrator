@@ -7,11 +7,13 @@ from machine import Pin
 from pico.cycle import SlowCycle
 import utime
 
+# installed packages
+import tomli as toml
+
 # local imports
 from blink import Blink
 from drybox import hardware
 from drybox.hardware import Pico
-from external import tomli as toml
 from microapp.microapp import MicroApp
 
 DEFAULT_CONFIG_PATH = "/config.toml"

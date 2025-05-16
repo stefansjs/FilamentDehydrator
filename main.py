@@ -5,7 +5,7 @@ Ideally this lets me or others choose which app to run by editing the config.tom
 in the editor or making code-changes.
 """
 
-from external import tomli as toml
+import tomli as toml
 
 def main():
     config = read_config()
