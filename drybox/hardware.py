@@ -95,6 +95,7 @@ class TemperatureController:
 
     def off(self):
         self._target_temperature = None
+        self.heater.off()
 
     def run_loop(self):
         TemperatureController.check(self)

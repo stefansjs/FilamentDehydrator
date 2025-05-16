@@ -148,6 +148,13 @@ class DryBox:
         self.exhaust_fan.off()
         print("Reset drybox")
 
+    def turn_off_everything(self):
+        print("Shutting off everything")
+        Pico.PICO_LED.off()
+        self.heater.off()
+        self.recirculation_fan.shut_down()
+        self.exhaust_fan.off()
+
     def run(self, refresh_rate=3):
         self.reset()
         refresh_period_ms = round(1000 / refresh_rate)
@@ -157,7 +164,7 @@ class DryBox:
 
 
     def build_microapp(self, refresh_period_ms):
-        app = MicroApp(error_handler=self.error_handler, cancel_callback=self.reset)
+        app = MicroApp(error_handler=self.error_handler, cancel_callback=self.turn_off_everything)
 
         app.add_scheduled(app._repeat_with_interval(1500, self.hygrometer.try_read))
         app.add_scheduled(self.recirculation_fan.run())
