@@ -4,7 +4,7 @@ from pico.pin import Analog  # Import Pin and ADC from the machine module
 # micropython imports
 from machine import Pin, PWM
 import utime
-import dht
+from rp2_dht_reader import DhtReader
 
 
 class UnsafeTemperature(Exception):
@@ -206,50 +206,21 @@ class Fan:
 
 class Hygrometer:
     def __init__(self, pin: int = 28):
-        self.pin = dht.DHT11(Pin(pin))
+        self.sensor = DhtReader(pin)
         self.start_time = utime.ticks_ms()
         self.read_time = None
-
-        self.temperature = None
-        self.humidity = None
-
-    def measure_async(self):
-        asyncio.create_task(self._read())
-
-    async def _read(self):
-        self.try_read()  # Just run the read function without returning its result
 
     def try_read(self):
         """
         Read the DHT11 sensor data.
         """
-        current_time = utime.ticks_ms()
-        last_time = self.read_time if self.read_time is not None else self.start_time
-        if utime.ticks_diff(current_time, last_time) < 1_000:  # 1 second
-            return False
-        
-        # Pico.PICO_LED.on()
-        try:
-            self.pin.measure()
-            self.temperature = self.pin.temperature()
-            self.humidity = self.pin.humidity()
-        
-        except Exception as e:
-            print("Failed to read measurements")
-            self.temperature = None
-            self.humidity = None
-            return False
-        
-        finally:
-            self.read_time = current_time
-        
-        return True
+        return self.sensor.sense()
     
     def get_humidity(self):
-        return self.humidity
+        return self.sensor.humidity
     
     def get_temperature(self):
-        return self.temperature
+        return self.sensor.temperature
         
     
 
