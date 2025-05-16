@@ -295,15 +295,12 @@ class Dehydrator:
         if temp is None:
             raise ValueError("Cannot read temperature")
 
-        if temp < 35:
-            print("Preheating")
-            did_preheat = await self.preheat(timeout_s=self.timeout_s)
+        print("Preheating")
+        did_preheat = await self.preheat(timeout_s=self.timeout_s)
 
-            if not did_preheat:
-                print("Couldn't preheat. Exiting.")
-                return
-        else:
-            print(f"Temperature is {temp}. Skipping preheat")
+        if not did_preheat:
+            print("Timed out before preheat finished. That's probably bad")
+            return
 
         
         # Let the values settle a little bit
@@ -311,7 +308,6 @@ class Dehydrator:
         self.drybox.stay_hot()
         await asyncio.sleep(self.sensor_settle_duration_s)
 
-        # print("Doing first moisture absorption")
         # We should do at least one moisture absorption cycle before checking if we've reached our target
         humidity = await self.absorb_moisture(timeout_s=self.timeout_s)
 
@@ -330,10 +326,14 @@ class Dehydrator:
                 humidity = await self.absorb_moisture()
 
             else:
-                print("Looks like we reached our target humidity")
-                print("Sleeping for 10s")
+                print(f"Looks like we reached our target humidity. Sleeping for {self.total_measurement_duration_s}s")
                 self.drybox.idle()
-                await asyncio.sleep(10)
+                await asyncio.sleep(self.total_measurement_duration_s)
+                
+                # run fan for a few seconds before reading the next
+                self.drybox.recirculate()
+                await asyncio.sleep(self.sensor_settle_duration_s)
+                self.drybox.idle()
                 humidity = self.humidity
 
         
@@ -346,11 +346,12 @@ class Dehydrator:
         
         timeout_ms = int(round(timeout_s or self.timeout_s))
         
-        hysteresis = self.drybox.heater.histeresis_c
+        hysteresis = self.drybox.heater.temp_hysteresis
         settled_delay_s = self.sensor_settle_duration_s
         settled_delay_samples = settled_delay_s * self.sample_rate
         settled_samples = 0
 
+        self.drybox.heat(target_temp)
         start_time = current_time = utime.ticks_ms()
         while True:
             current_temp = self.temp
@@ -374,8 +375,8 @@ class Dehydrator:
 
     async def absorb_moisture(self, timeout_s=60*60):
         start_time = utime.ticks_ms()
-        self.drybox.heat()
-        print(f"Setting temperature to {self.drybox.target_temperature}")
+        self.drybox.stay_hot()
+        print(f"Absorbing moistrue cycle at {self.drybox.target_temperature}")
 
         # What I expect to happen is that I will start with a very low humidity (probably below the target humidity)
         # and gradually increase the moisture as the warm air takes moisture out of the filament. 
