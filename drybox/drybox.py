@@ -361,6 +361,8 @@ class Dehydrator:
                 return False
             
             # count how many times we've measured
+            if target_temp is None or current_temp is None:
+                print("Missing temperature")
             if target_temp - current_temp > hysteresis:
                 settled_samples = 0
             elif current_temp - target_temp > hysteresis:
@@ -389,7 +391,9 @@ class Dehydrator:
             await asyncio.sleep(self.measurement_interval_s)
 
         # Do I need some smoothing?
-        def get_slope(readings):
+        def get_slope(readings, fallback=None):
+            if None in readings[-1:1]:
+                return fallback
             return (readings[-1] - readings[0]) / self._num_measurements
         
         starting_slope = get_slope(humidity_readings)
@@ -409,6 +413,8 @@ class Dehydrator:
             
             current_time = utime.ticks_ms()
             print(f"humidity: {humidity_readings}, slope: {current_slope}, target slope: {target_slope}")
+            if current_slope is None:
+                current_slope = target_slope
 
         return humidity_readings[-1]
 
