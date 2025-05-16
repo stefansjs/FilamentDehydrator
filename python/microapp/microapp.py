@@ -169,15 +169,15 @@ class MicroApp:
             raise exception  # don't try to cancel while I'm being cancelled
 
         if isinstance(exception, KeyboardInterrupt):
-            print("Received keyboard interrupt. Cancelling all tasks.")
-            self.cancel()
+            print("Received keyboard interrupt. Cancelling main task.")
+            self.shutdown = True
             return
         
         should_ignore = self._call_error_handler(func, exception)
         if should_ignore is True:
             return
         
-        print(f"Error in scheduled function {func.__name__}: {exception}")
+        print(f"Error in scheduled function {str(func)}: {exception}")
         sys.print_exception(exception)
         self.cancel()
         raise exception
